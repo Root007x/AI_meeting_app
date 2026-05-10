@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Calendar, Clock, Users, FileText, Trash2,
   ChevronRight, Mic, Tag, X, MessageSquare, Download,
-  SortDesc, RefreshCw, Eye
+  SortDesc, RefreshCw, Eye, Activity, Sparkles, Zap
 } from 'lucide-react';
 import api from './api';
 
@@ -31,6 +31,7 @@ function MeetingDetail({ id, onClose }: MeetingDetailProps) {
   const [note, setNote]       = useState('');
   const [saving, setSaving]   = useState(false);
   const [newTag, setNewTag]   = useState('');
+  const [isSummarizing, setIsSummarizing] = useState(false);
 
   useEffect(() => {
     api.get(`/api/meetings/${id}`)
@@ -65,6 +66,27 @@ function MeetingDetail({ id, onClose }: MeetingDetailProps) {
     const updated = (data?.tags || []).filter((t: string) => t !== tag);
     await api.patch(`/api/meetings/${id}`, { tags: updated });
     setData((d: any) => ({ ...d, tags: updated }));
+  };
+
+  const generateSummary = async () => {
+    if (!data?.segments?.length) return;
+    setIsSummarizing(true);
+    try {
+      const res = await api.post('/api/summarize', {
+        transcript: data.segments.map((s: any) => `${s.speaker}: ${s.text}`).join('\n'),
+        meeting_id: id,
+      });
+      setData((d: any) => ({ 
+        ...d, 
+        summary: res.data.summary, 
+        meeting: { ...d.meeting, summary_preview: res.data.summary.substring(0, 100) } 
+      }));
+    } catch (err) {
+      console.error('Failed to generate summary', err);
+      alert('Failed to generate summary');
+    } finally {
+      setIsSummarizing(false);
+    }
   };
 
   const exportPDF = async () => {
@@ -148,10 +170,26 @@ function MeetingDetail({ id, onClose }: MeetingDetailProps) {
 
       <div className="detail-body">
         {/* Summary */}
-        {data?.summary && (
+        {data?.summary ? (
           <div className="detail-section">
             <div className="section-label"><FileText size={10} /> AI Summary</div>
             <div className="summary-box">{data.summary}</div>
+          </div>
+        ) : (
+          <div className="detail-section">
+            <div className="section-label"><Zap size={10} /> AI Summary</div>
+            <div style={{ background: 'var(--panel-2)', padding: 16, borderRadius: 'var(--radius)', border: '1px solid var(--border)', textAlign: 'center' }}>
+              <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 12 }}>No summary was generated for this meeting.</p>
+              <button
+                className="action-btn btn-outline"
+                style={{ margin: '0 auto', width: 'auto', padding: '0 16px' }}
+                onClick={generateSummary}
+                disabled={isSummarizing || segments.length === 0}
+              >
+                {isSummarizing ? <Activity size={15} className="animate-spin" /> : <Sparkles size={15} strokeWidth={2.2} />}
+                {isSummarizing ? 'Analyzing…' : 'Generate Summary'}
+              </button>
+            </div>
           </div>
         )}
 
